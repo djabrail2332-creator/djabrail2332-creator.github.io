@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Красивые номера</title>
+
+<style>
+body { background:#0f172a; color:#e5e7eb; font-family:Arial,sans-serif; padding:20px; }
+.container { max-width:1200px; margin:auto; }
+.card {
+    background:#020617;
+    border-radius:14px;
+    padding:16px;
+    margin-top:16px;
+    border:2px solid #334155;
+}
+.gold { border-color:#facc15; }
+.nums { font-size:18px; margin-bottom:10px; }
+.price { color:#4ade80; font-size:20px; font-weight:bold; }
+.buttons a {
+    display:inline-block;
+    margin:6px 6px 0 0;
+    padding:10px 14px;
+    background:#38bdf8;
+    color:#020617;
+    text-decoration:none;
+    border-radius:8px;
+    font-weight:bold;
+}
+.filters { margin:16px 0; display:flex; gap:12px; flex-wrap:wrap; }
+input { padding:10px; border-radius:8px; }
+</style>
+</head>
+
+<body>
+<div class="container">
+<h1>Красивые телефонные номера</h1>
+
+<div class="filters">
+<label><input type="checkbox" id="fGold"> только золото</label>
+<input id="search" placeholder="поиск по цифрам">
+</div>
+
+<div id="list"></div>
+</div>
+
+<script>
+const PHONE="+79251616628";
+const TG="jabrail_d";
+const data=JSON.parse(localStorage.getItem("SHOP_DATA")||"[]");
+
+function render(){
+    const onlyGold=document.getElementById("fGold").checked;
+    const search=document.getElementById("search").value;
+    let html="";
+
+    data.forEach(item=>{
+        if(onlyGold && item.category!=="gold") return;
+        if(search && !item.numbers.join("").includes(search)) return;
+
+        html+=`
+        <div class="card ${item.category==="gold"?"gold":""}">
+            <div class="nums">${item.numbers.join("<br>")}</div>
+            <div class="price">${item.price.toLocaleString()} ₽</div>
+            <div class="buttons">
+                <a href="https://wa.me/79251616628?text=Интересует номер ${item.numbers.join(", ")}" target="_blank">WhatsApp</a>
+                <a href="https://t.me/${TG}" target="_blank">Telegram</a>
+                <a href="tel:${PHONE}">Позвонить</a>
+            </div>
+        </div>`;
+    });
+
+    document.getElementById("list").innerHTML = html || "Нет доступных номеров";
+}
+
+document.getElementById("search").oninput=render;
+document.getElementById("fGold").onchange=render;
+render();
+</script>
+</body>
+</html>
