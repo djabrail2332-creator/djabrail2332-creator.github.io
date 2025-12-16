@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Фильтр телефонных номеров</title>
+
+<style>
+body {
+    background:#0f172a;
+    color:#e5e7eb;
+    font-family:Arial,sans-serif;
+    padding:20px;
+}
+.container { max-width:1200px; margin:auto; }
+
+textarea, input, select {
+    width:100%;
+    padding:12px;
+    font-size:16px;
+    border-radius:10px;
+    margin-top:10px;
+}
+
+button {
+    padding:12px;
+    margin-top:10px;
+    border-radius:10px;
+    border:none;
+    background:#38bdf8;
+    font-weight:bold;
+    cursor:pointer;
+    width:100%;
+}
+
+.filters {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:10px;
+    margin-top:10px;
+}
+
+.group {
+    background:#020617;
+    border-radius:12px;
+    padding:12px;
+    margin-top:12px;
+}
+.group.pair { border:2px solid #38bdf8; }
+.group.gold { border-color:#facc15; }
+
+.number { padding:6px 0; }
+.highlight span { color:#facc15; font-weight:bold; }
+.diff { color:#ef4444; font-weight:bold; }
+
+.badge {
+    font-size:12px;
+    color:#38bdf8;
+    margin-bottom:6px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+<h1>Красивые телефонные номера</h1>
+
+<textarea id="input" placeholder="
+8928-735-05-75
+8928-735-05-25
+8928-735-79-89
+8928-735-79-88
+"></textarea>
+
+<button onclick="analyze()">Анализировать</button>
+
+<div class="filters">
+    <label><input type="checkbox" id="fPairs"> Парные</label>
+    <label><input type="checkbox" id="fSingle"> Обычные</label>
+    <label><input type="checkbox" id="fGold"> Только золото</label>
+
+    <select id="repeatFilter">
+        <option value="">Любые повторы</option>
+        <option value="1">1 повтор</option>
+        <option value="2">2 повтора</option>
+        <option value="3">3+ повторов</option>
+    </select>
+</div>
+
+<input id="search" placeholder="Поиск по цифрам (например 89, 735)">
+
+<button onclick="copyText()">Скопировать результат</button>
+
+<div id="output"></div>
+</div>
+
+<script>
+let groups = [];
+
+/* ---------- ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ ---------- */
+["fPairs","fSingle","fGold","repeatFilter","search"].forEach(id=>{
+    const el=document.getElementById(id);
+    const v=localStorage.getItem(id);
+    if(el && v!==null){
+        el.type==="checkbox"?el.checked=v==="true":el.value=v;
+    }
+    el && el.addEventListener("change",()=>saveState());
+    el && el.addEventListener("input",()=>saveState());
+});
+
+function saveState(){
+    ["fPairs","fSingle","fGold","repeatFilter","search"].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        localStorage.setItem(id, el.type==="checkbox"?el.checked:el.value);
+    });
+}
+
+/* ---------- АНАЛИЗ ---------- */
+function analyze() {
+    const text = document.getElementById("input").value;
+    const digits = text.replace(/\D/g,"");
+
+    let raw=[];
+    for(let i=0;i+10<digits.length;i+=11){
+        raw.push(digits.substr(i,11));
+    }
+    if(!raw.length){
+        document.getElementById("output").innerHTML="Ничего не найдено";
+        return;
+    }
+
+    const phones = raw.map(p=>{
+        if(p.startsWith("8")) p="7"+p.slice(1);
+        if(p.length===10) p="7"+p;
+        return "+7"+p.slice(1);
+    });
+
+    const used=new Set();
+    groups=[];
+
+    for(let i=0;i<phones.length;i++){
+        if(used.has(i)) continue;
+        let g=[phones[i]];
+        used.add(i);
+
+        for(let j=i+1;j<phones.length;j++){
+            if(used.has(j)) continue;
+            if(hamming(phones[i],phones[j])===1){
+                g.push(phones[j]);
+                used.add(j);
+            }
+        }
+
+        groups.push({
+            nums:g,
+            pair:g.length>1,
+            gold:isGold(g),
+            repeats:maxRepeat(g[0])
+        });
+    }
+
+    render();
+}
+
+/* ---------- РЕНДЕР ---------- */
+function render(){
+    const fPairs=document.getElementById("fPairs").checked;
+    const fSingle=document.getElementById("fSingle").checked;
+    const fGold=document.getElementById("fGold").checked;
+    const repeat=document.getElementById("repeatFilter").value;
+    const search=document.getElementById("search").value;
+
+    let html="";
+
+    groups.forEach(g=>{
+        if(fPairs && !g.pair) return;
+        if(fSingle && g.pair) return;
+        if(fGold && !g.gold) return;
+
+        if(repeat){
+            if(repeat==="3" && g.repeats<3) return;
+            if(repeat!=="3" && g.repeats!=repeat) return;
+        }
+
+        if(search && !g.nums.join("").includes(search)) return;
+
+        html+=`<div class="group ${g.pair?"pair":""} ${g.gold?"gold":""}">
+            ${g.pair?'<div class="badge">🔁 Парные</div>':""}
+            ${g.gold?'<div class="badge">🥇 Золото</div>':""}`;
+
+        g.nums.forEach(n=>{
+            html+=`<div class="number">${highlightDiff(g.nums[0],n)}</div>`;
+        });
+
+        html+="</div>";
+    });
+
+    document.getElementById("output").innerHTML=html||"Нет результатов";
+}
+
+/* ---------- УТИЛИТЫ ---------- */
+function hamming(a,b){
+    let d=0;
+    for(let i=0;i<a.length;i++) if(a[i]!==b[i]) d++;
+    return d;
+}
+
+function isGold(g){
+    if(g.length>1) return true;
+    const n=g[0].slice(-4);
+    if(n[0]===n[1]||n[2]===n[3]) return true;
+    if(n===n.split("").reverse().join("")) return true;
+    return false;
+}
+
+function maxRepeat(num){
+    const f={};
+    num.replace(/\D/g,"").split("").forEach(d=>f[d]=(f[d]||0)+1);
+    return Math.max(...Object.values(f));
+}
+
+function highlightDiff(base,num){
+    let out="+7";
+    for(let i=2;i<num.length;i++){
+        if(num[i]!==base[i]) out+=`<span class="diff">${num[i]}</span>`;
+        else out+=num[i];
+    }
+    return out;
+}
+
+function copyText(){
+    let text="";
+    groups.forEach(g=>{
+        g.nums.forEach(n=>text+=n+"\n");
+        text+="\n";
+    });
+    navigator.clipboard.writeText(text);
+    alert("Скопировано");
+}
+</script>
+
+</body>
+</html>
